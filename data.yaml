@@ -1,0 +1,7 @@
+train: C:\Users\ASUS\Desktop\pyresearch videos codes\Meat qulity check\train\images
+val: C:\Users\ASUS\Desktop\pyresearch videos codes\Meat qulity check\valid\images
+#test: C:\Users\ASUS\Downloads\food quality.v1i.yolov12\test\images
+
+nc: 3
+names: ['Fresh', 'Half-Fresh', 'Spoiled']
+

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meat Freshness Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #1a1a3d, #4a1d96);
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.97);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+            animation: fadeIn 1s ease-in;
+        }
+        h1 {
+            color: #ffd700;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+        p {
+            color: #333;
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+        input[type="file"] {
+            margin: 20px 0;
+            padding: 12px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            border: 2px solid #ffd700;
+        }
+        button, #downloadVideo {
+            background: linear-gradient(45deg, #ffd700, #ffaa00);
+            color: #1a1a3d;
+            padding: 14px 30px;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: 600;
+            margin: 10px;
+            text-decoration: none;
+            display: inline-block;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        button:hover, #downloadVideo:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(255, 215, 0, 0.5);
+        }
+        #downloadVideo {
+            display: none;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 1.3em;
+            color: #333;
+            background: #e8f0fe;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        #loading {
+            margin-top: 20px;
+            font-size: 1.4em;
+            color: #ffd700;
+            display: none;
+            text-align: center;
+        }
+        #loading::before {
+            content: '';
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 5px solid #ffd700;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        #error {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+        canvas {
+            margin-top: 30px;
+            max-width: 600px;
+            width: 100%;
+            background: #fff;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        #previewVideo, #previewImage, #detectionImage {
+            display: none;
+            max-width: 100%;
+            margin-top: 20px;
+            border-radius: 10px;
+            border: 3px solid #ffd700;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @media (max-width: 600px) {
+            .container { padding: 20px; }
+            canvas { max-width: 350px; }
+            button, #downloadVideo { padding: 12px 20px; font-size: 1em; }
+            h1 { font-size: 2em; }
+            #loading { font-size: 1.2em; }
+            #loading::before { width: 30px; height: 30px; border-width: 4px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Meat Freshness Detection</h1>
+        <p>Upload an image or video to analyze meat freshness with AI precision.</p>
+        <input type="file" id="fileInput" accept="image/*,video/*" title="Select an image or video">
+        <button onclick="uploadFile()" title="Analyze the uploaded file">Upload and Analyze</button>
+        <button onclick="resetUI()" title="Clear all results">Clear</button>
+        <video id="previewVideo" controls></video>
+        <img id="previewImage"/>
+        <div id="loading">Processing your file...</div>
+        <div id="error"></div>
+        <div id="result"></div>
+        <canvas id="pieChart"></canvas>
+        <img id="detectionImage"/>
+        <a id="downloadVideo" href="" download="annotated_video.mp4">Download Annotated Video</a>
+    </div>
+
+    <script>
+        let chartInstance = null;
+
+        // File preview
+        const fileInput = document.getElementById('fileInput');
+        fileInput.addEventListener('change', function() {
+            console.log('File selected:', fileInput.files[0]?.name);
+            const file = fileInput.files[0];
+            const previewVideo = document.getElementById('previewVideo');
+            const previewImage = document.getElementById('previewImage');
+            previewVideo.style.display = 'none';
+            previewImage.style.display = 'none';
+            if (file) {
+                const url = URL.createObjectURL(file);
+                if (file.type.startsWith('video/')) {
+                    previewVideo.src = url;
+                    previewVideo.style.display = 'block';
+                    console.log('Previewing video');
+                } else if (file.type.startsWith('image/')) {
+                    previewImage.src = url;
+                    previewImage.style.display = 'block';
+                    console.log('Previewing image');
+                }
+            }
+        });
+
+        async function uploadFile() {
+            console.log('Upload and Analyze button clicked');
+            const resultDiv = document.getElementById('result');
+            const errorDiv = document.getElementById('error');
+            const loadingDiv = document.getElementById('loading');
+            const detectionImage = document.getElementById('detectionImage');
+            const downloadVideo = document.getElementById('downloadVideo');
+            const ctx = document.getElementById('pieChart').getContext('2d');
+
+            // Reset UI
+            resultDiv.innerHTML = '';
+            errorDiv.style.display = 'none';
+            errorDiv.innerHTML = '';
+            loadingDiv.style.display = 'block';
+            detectionImage.style.display = 'none';
+            detectionImage.src = '';
+            downloadVideo.style.display = 'none';
+            downloadVideo.href = '';
+            if (chartInstance) {
+                chartInstance.destroy();
+                chartInstance = null;
+            }
+
+            if (!fileInput.files[0]) {
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = 'Please select an image or video file.';
+                console.log('No file selected');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                console.log('Sending file to server:', fileInput.files[0].name);
+                const response = await fetch('http://127.0.0.1:5000/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Server responded with status ${response.status}: ${errorText}`);
+                }
+                const data = await response.json();
+                console.log('Server response:', data);
+
+                if (data.error) {
+                    errorDiv.style.display = 'block';
+                    errorDiv.innerHTML = `Error: ${data.error}`;
+                    return;
+                }
+
+                // Display suggestion
+                resultDiv.innerHTML = `<strong>Suggestion:</strong> ${data.suggestion}`;
+
+                // Display detection image
+                if (data.image_base64) {
+                    detectionImage.src = `data:image/jpeg;base64,${data.image_base64}`;
+                    detectionImage.style.display = 'block';
+                    console.log('Detection image displayed');
+                } else {
+                    console.log('No detection image returned');
+                }
+
+                // Display video download link
+                if (data.video_base64) {
+                    downloadVideo.href = `data:video/mp4;base64,${data.video_base64}`;
+                    downloadVideo.style.display = 'block';
+                    console.log('Video download link displayed');
+                }
+
+                // Create pie chart
+                chartInstance = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Fresh', 'Half-Fresh', 'Spoiled'],
+                        datasets: [{
+                            data: [
+                                data.percentages['Fresh'] || 0,
+                                data.percentages['Half-Fresh'] || 0,
+                                data.percentages['Spoiled'] || 0
+                            ],
+                            backgroundColor: ['#36A2EB', '#FFCE56', '#FF6384'],
+                            borderColor: ['#ffffff', '#ffffff', '#ffffff'],
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { font: { size: 16, family: 'Poppins' }, color: '#333' }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Meat Freshness Distribution',
+                                font: { size: 20, family: 'Poppins', weight: '600' },
+                                color: '#333'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.label || '';
+                                        let value = context.raw || 0;
+                                        return `${label}: ${value.toFixed(2)}%`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                console.log('Pie chart rendered successfully');
+            } catch (error) {
+                console.error('Error:', error.message);
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = `Error: ${error.message}`;
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        function resetUI() {
+            console.log('Clear button clicked');
+            fileInput.value = '';
+            document.getElementById('result').innerHTML = '';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('previewVideo').style.display = 'none';
+            document.getElementById('previewImage').style.display = 'none';
+            document.getElementById('detectionImage').style.display = 'none';
+            document.getElementById('downloadVideo').style.display = 'none';
+            if (chartInstance) {
+                chartInstance.destroy();
+                chartInstance = null;
+                console.log('Chart destroyed');
+            }
+        }
+    </script>
+</body>
+</html>
